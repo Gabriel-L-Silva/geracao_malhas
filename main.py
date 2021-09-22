@@ -67,11 +67,103 @@ def find_right_left(corners, faces):
         corner.c_r = corners[corner.c_n-1].c_o
         corner.c_l = corners[corner.c_p-1].c_o
         
+def inside(pr, T):
+    for tri in T:
+        A = [[1,1,1],
+                [tri[0][0], tri[1][0], tri[2][0]],
+                [tri[0][1], tri[1][1], tri[2][1]]]
+        b = [1, pr[0], pr[1]]
+
+        x = np.linalg.solve(A,b)
+        #como estar em cima da aresta reflete nos lambdas?
+        if (x > 0).all():
+            return True, tri, []
+        else:
+            if x[0] == 0:
+                #v1 e v2
+                return False, tri, [x[0], x[1]]
+            elif x[1] == 0:
+                #v2 e v3
+                return False, tri, [x[1], x[2]]
+            elif x[2] == 0:
+                #v3 e v1
+                return False, tri, [x[2], x[0]]
+    return False, [], []
+
+def aresta_ilegal(aresta, t, pr):
+    a, b, c = t #Pode estar errado aqui, os pontos precisam estar em sentido antihorario
+    d = pr
+    A = [[a[0], a[1], a[0]**2+a[1]**2, 1],
+         [b[0], b[1], b[0]**2+b[1]**2, 1],
+         [c[0], c[1], c[0]**2+c[1]**2, 1],
+         [d[0], d[1], d[0]**2+d[1]**2, 1]]
+    if np.linalg.det(A) > 0:
+        return True
+    return False
+
+def oposto(aresta, t, T):
+    t = np.asarray(t)[:,:-1] #ignorando o 3d
+    aresta = np.asarray(aresta)[:,:-1] #ignorando o 3d
+    T.append([[-0.234139, -0.203738, 0.0], [0.468278, -0.203738, 0.0],[1,1,0.0]])
+    for tri in T:       
+        tri = np.asarray(tri)[:,:-1] #ignorando o 3d
+        inter = []
+        for idx, x in enumerate(t==tri):
+            if x[0] and x[1]:
+                inter.append(tri[idx])
+        if len(inter) == 2 and (inter==aresta).all():
+            for i in inter:
+                tri = np.delete(tri, np.where(tri==i)).reshape(-1,2)
+            return list(tri[0])
+
+def legalize_aresta(pr, aresta, t, T):
+    pr = oposto(aresta, t, T)
+    pr.append(0)
+    if not aresta_ilegal(aresta, t, pr):
+        pass
+    pass
+
+def delaunay_triangulation(verts):
+    verts = np.array(verts)
+    faces = np.array([])
+
+    x_max, y_max, z_max = verts.max(axis=0)
+    x_min, y_min, z_min = verts.min(axis=0)
+
+    pa = [x_min, y_min, z_min]
+    pb = [2*x_max, y_min, z_min]
+    pc = [x_min, 2*y_max, z_min]
+    
+    T = [[pa,pb,pc]]
+    for pr in verts:
+        ins, t, aresta = inside(pr, T)
+        if ins:
+            pi, pj, pk = t
+            legalize_aresta(pr, [pi,pj], t, T)
+            legalize_aresta(pr, [pj,pk], t, T)
+            legalize_aresta(pr, [pk,pi], t, T)
+        elif len(aresta) == 2:
+            pi, pj, pk = t
+            pl = []
+            for tri in T:
+                if (t == tri):
+                    continue
+                
+                inter = np.intersect1d(t,tri)
+                if len(inter) == 2 and (inter == aresta).all():
+                    pl = np.delete(tri, np.where(tri==inter))
+                    break
+            #achar outro tri que compartilha pi, pj
+            
+            pass
+
+    print(x_max, y_max, z_max)
 
 def main ():
     objs = read_OBJ()
     for obj in objs:
-        faces = np.asarray(obj.faces)
+        # faces = np.asarray(obj.faces)
+        faces = delaunay_triangulation(obj.vertex)
         # (unique,counts) = np.unique(faces, return_counts=True)
         # frequencies = np.asarray((unique, counts)).T
         # print(frequencies)
