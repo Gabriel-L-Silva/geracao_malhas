@@ -1,5 +1,6 @@
 import os
 import numpy as np
+import matplotlib.pyplot as plt
 
 PATH = "./OBJ/"
 
@@ -75,7 +76,6 @@ def inside(pr, T):
         b = [1, pr[0], pr[1]]
 
         x = np.linalg.solve(A,b)
-        #como estar em cima da aresta reflete nos lambdas?
         if (x > 0).all():
             return True, tri, []
         else:
@@ -104,8 +104,8 @@ def aresta_ilegal(aresta, t, pr):
 def oposto(aresta, t, T):
     t = np.asarray(t)[:,:-1] #ignorando o 3d
     aresta = np.asarray(aresta)[:,:-1] #ignorando o 3d
-    T.append([[-0.234139, -0.203738, 0.0], [0.468278, -0.203738, 0.0],[1,1,0.0]])
     for tri in T:       
+        trian = tri
         tri = np.asarray(tri)[:,:-1] #ignorando o 3d
         inter = []
         for idx, x in enumerate(t==tri):
@@ -114,77 +114,140 @@ def oposto(aresta, t, T):
         if len(inter) == 2 and (inter==aresta).all():
             for i in inter:
                 tri = np.delete(tri, np.where(tri==i)).reshape(-1,2)
-            return list(tri[0])
+            return list(tri[0]), trian
+    return [],[]
 
 def legalize_aresta(pr, aresta, t, T):
-    pr = oposto(aresta, t, T)
+    pr, trian = oposto(aresta, t, T)
+    if len(pr) == 0:
+        return #TODO: perguntar sobre isso -> assumindo que se não tem oposto, a aresta é legal
     pr.append(0)
-    if not aresta_ilegal(aresta, t, pr):
-        pass
-    pass
+    if aresta_ilegal(aresta, t, pr):
+        pi,pj,pk = t
+        T.remove(t)
+        T.remove(trian)
 
-def delaunay_triangulation(verts):
+        t1 = [pi, pr, pk]
+        t2 = [pk, pr, pj]
+        T.append(t1)
+        T.append(t2)
+
+        legalize_aresta(pr, [pi,pk], t1, T)
+        legalize_aresta(pr, [pk,pj], t2, T)
+
+def plot_tri(ax1, faces, vertex):
+    verts = []
+    idxs = []
+    for tri in faces:
+        tri_idxs = []
+        for v in tri:
+            v = tuple(v)
+            if v not in verts:
+                verts.append(v) 
+            tri_idxs.append(verts.index(v))
+        idxs.append(tri_idxs)
+
+    verts = np.asarray(verts)
+    ax1.clear()
+    ax1.scatter(vertex[:,0], vertex[:,1], color='r')
+    ax1.triplot(verts[:,0], verts[:,1], triangles = idxs, color='k')
+    plt.pause(0.05)
+
+def delaunay_triangulation(ax1, verts):
     verts = np.array(verts)
     faces = np.array([])
 
     x_max, y_max, z_max = verts.max(axis=0)
     x_min, y_min, z_min = verts.min(axis=0)
 
-    pa = [x_min, y_min, z_min]
-    pb = [2*x_max, y_min, z_min]
-    pc = [x_min, 2*y_max, z_min]
-    
+    pa = [2*x_min, 2*y_min, z_min]
+    pb = [2*x_max+abs(x_min), y_min, z_min]
+    pc = [x_min, 2*y_max+abs(y_min), z_min]
+    print(x_min, y_min, z_min)
+    print(x_max, y_max, z_max)
     T = [[pa,pb,pc]]
     for pr in verts:
+        plot_tri(ax1, T, verts)
+
         ins, t, aresta = inside(pr, T)
         if ins:
+            pr = list(pr)
             pi, pj, pk = t
-            legalize_aresta(pr, [pi,pj], t, T)
-            legalize_aresta(pr, [pj,pk], t, T)
-            legalize_aresta(pr, [pk,pi], t, T)
+            t1 = [pi, pj, pr]
+            t2 = [pj, pk, pr]
+            t3 = [pi, pr, pk]
+            T.remove(t)
+            T.append(t1)
+            T.append(t2)
+            T.append(t3)
+
+            legalize_aresta(pr, [pi,pj], t1, T)
+            legalize_aresta(pr, [pj,pk], t2, T)
+            legalize_aresta(pr, [pk,pi], t3, T)
         elif len(aresta) == 2:
             pi, pj, pk = t
-            pl = []
-            for tri in T:
-                if (t == tri):
-                    continue
-                
-                inter = np.intersect1d(t,tri)
-                if len(inter) == 2 and (inter == aresta).all():
-                    pl = np.delete(tri, np.where(tri==inter))
-                    break
+            pr = list(pr)
+            pl, tri = oposto([pi,pj], t, T)
+            #TODO: verificar oque fazer nesse caso, quando nao tem oposto e o 
+            # ponto esta encima de uma aresta da borda
+            if len(pl) == 0:
+                continue 
             #achar outro tri que compartilha pi, pj
-            
-            pass
+            t1 = [pl, pr, pi]
+            t2 = [pl, pj, pr]
+            t3 = [pj, pk, pr]
+            t4 = [pk, pi, pr]
+            T.remove(tri)
+            T.remove(t)
+            T.append(t1)
+            T.append(t2)
+            T.append(t3)
+            T.append(t4)
 
-    print(x_max, y_max, z_max)
+            legalize_aresta(pr, [pi, pl], t1, T)
+            legalize_aresta(pr, [pl, pj], t2, T)
+            legalize_aresta(pr, [pk, pk], t3, T)
+            legalize_aresta(pr, [pk, pi], t4, T)
+    for t in T:
+        for v in t:
+            v = np.asarray(v)
+            if (v == pa).all() or (v == pb).all() or (v == pc).all():
+                T.remove(t)
+                break
+    plot_tri(ax1, T, verts)
+    plt.show(block=True)
+    return T
 
 def main ():
     objs = read_OBJ()
+    fig1, ax1 = plt.subplots()
+    ax1.set_aspect('equal')
+    ax1.set_title('triplot of Delaunay triangulation')
     for obj in objs:
         # faces = np.asarray(obj.faces)
-        faces = delaunay_triangulation(obj.vertex)
+        faces = delaunay_triangulation(ax1, obj.vertex)
         # (unique,counts) = np.unique(faces, return_counts=True)
         # frequencies = np.asarray((unique, counts)).T
         # print(frequencies)
 
+        
         corners = []
-        c_count = 0
-        for f_idx, f in enumerate(faces):
-            for v_idx,vert in enumerate(f): 
-                corner = c_count + v_idx + 1 
-                c_v = vert
-                c_t = f_idx + 1
-                c_n = (v_idx + 1) % 3 + c_count + 1
-                c_p = (v_idx + 2) % 3 + c_count + 1
-                corners.append(Corner(corner, c_v, c_t, c_n, c_p))
-            c_count += 3
+        # c_count = 0
+        # for f_idx, f in enumerate(faces):
+        #     for v_idx,vert in enumerate(f): 
+        #         corner = c_count + v_idx + 1 
+        #         c_v = vert
+        #         c_t = f_idx + 1
+        #         c_n = (v_idx + 1) % 3 + c_count + 1
+        #         c_p = (v_idx + 2) % 3 + c_count + 1
+        #         corners.append(Corner(corner, c_v, c_t, c_n, c_p))
+        #     c_count += 3
 
-        find_opposite(corners, faces)
-        find_right_left(corners, faces)
+        # find_opposite(corners, faces)
+        # find_right_left(corners, faces)
 
-        for c in corners:
-            print(c)
+        # for c in corners:
+        #     print(c)
 
 if __name__ == '__main__':
     main()
