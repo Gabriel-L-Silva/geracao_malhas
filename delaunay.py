@@ -3,15 +3,20 @@ import numpy as np
 import matplotlib.pyplot as plt
 import obj as OBJ
 import corner_table
+from itertools import permutations
+
+fig1, ax1 = plt.subplots()
+ax1.set_aspect('equal')
+ax1.set_title('triplot of Delaunay triangulation')
 
 def find_tri_corners(idx_tri, corners):
     for idx in range(0,len(corners),3):
-        if corners[idx].c_t == idx_tri:
+        if corners[idx].c_t == idx_tri + 1:
             return [corners[idx], corners[corners[idx].c_n - 1], corners[corners[idx].c_p - 1]]
 
 def inside(pr, verts, corners, T):
     for idx_t, tri in enumerate(T):
-        tr_c = find_tri_corners(idx_t+1, corners)
+        tr_c = find_tri_corners(idx_t, corners)
 
         A = [[1,1,1],
                 [verts[tr_c[0].c_v - 1][0], verts[tr_c[1].c_v - 1][0], verts[tr_c[2].c_v - 1][0]],
@@ -19,22 +24,22 @@ def inside(pr, verts, corners, T):
         b = [1, pr[0], pr[1]]
 
         x = np.linalg.solve(A,b)
-        if (x > 0).all():
+        if abs(x[0]) < 10e-3:
+            #v2 e v3
+            return False, tri, [tri[1], tri[2]]
+        elif abs(x[1]) < 10e-3:
+            #v3 e v1
+            return False, tri, [tri[2], tri[0]]
+        elif abs(x[2]) < 10e-3:
+            #v1 e v2
+            return False, tri, [tri[0], tri[1]]
+        elif (x > 0).all():
             return True, tri, []
-        else:
-            if abs(x[0]) < 10e-6:
-                #v1 e v2
-                return False, tri, [x[0], x[1]]
-            elif abs(x[1]) < 10e-6:
-                #v2 e v3
-                return False, tri, [x[1], x[2]]
-            elif abs(x[2]) < 10e-6:
-                #v3 e v1
-                return False, tri, [x[2], x[0]]
+            
     return False, [], []
 
 def aresta_ilegal(aresta, t, pl, verts):
-    a, b, c = t #Pode estar errado aqui, os pontos precisam estar em sentido antihorario
+    a, b, c = t
     d = pl
     A = [[verts[a-1][0], verts[a-1][1], verts[a-1][0]**2+verts[a-1][1]**2, 1],
          [verts[b-1][0], verts[b-1][1], verts[b-1][0]**2+verts[b-1][1]**2, 1],
@@ -44,24 +49,16 @@ def aresta_ilegal(aresta, t, pl, verts):
         return True
     return False
 
-def oposto(aresta, t, T):
-    t = np.asarray(t)[:,:-1] #ignorando o 3d
-    aresta = np.asarray(aresta)[:,:-1] #ignorando o 3d
-    for tri in T:       
-        trian = tri
-        tri = np.asarray(tri)[:,:-1] #ignorando o 3d
-        inter = []
-        for idx, x in enumerate(t==tri):
-            if x[0] and x[1]:
-                inter.append(tri[idx])
-        if len(inter) == 2 and (inter==aresta).all():
-            for i in inter:
-                tri = np.delete(tri, np.where(tri==i)).reshape(-1,2)
-            return list(tri[0]), trian
-    return [],[]
+def find_tri_index(t, T):
+    perm = permutations(t)
+
+    for p in perm:
+        if list(p) in T:
+            t = list(p)
+            return T.index(list(p))
 
 def legalize_aresta(pr, aresta, t, T, corners, verts):
-    cs = find_tri_corners(T.index(t) + 1, corners)
+    cs = find_tri_corners(find_tri_index(t, T), corners) # verificar permutações do tri
     
     pl = -1
     trian = len(T) + 1 
@@ -72,6 +69,7 @@ def legalize_aresta(pr, aresta, t, T, corners, verts):
     if pl == -1:
         return
 
+    #POssivel erro aq, flipa mas nao apaga as outras aresta(?)
     if aresta_ilegal(aresta, t, pl, verts):
         pi,pj,pk = t
         T.remove(t)
@@ -86,22 +84,14 @@ def legalize_aresta(pr, aresta, t, T, corners, verts):
         legalize_aresta(pl, [pi,pk], t1, T, corners, verts)
         legalize_aresta(pl, [pk,pj], t2, T, corners, verts)
 
-def plot_tri(ax1, faces, vertex):
-    verts = []
-    idxs = []
-    for tri in faces:
-        tri_idxs = []
-        for v in tri:
-            v = tuple(v)
-            if v not in verts:
-                verts.append(v) 
-            tri_idxs.append(verts.index(v))
-        idxs.append(tri_idxs)
+def plot_tri(faces, vertex):
+    global ax1
 
-    verts = np.asarray(verts)
+    faces = np.asarray(faces)-1
+    vertex = np.asarray(vertex)
     ax1.clear()
     ax1.scatter(vertex[:,0], vertex[:,1], color='r')
-    ax1.triplot(verts[:,0], verts[:,1], triangles = idxs, color='k')
+    ax1.triplot(vertex[:,0], vertex[:,1], triangles = faces, color='k')
     plt.pause(0.05)
 
 def delaunay_triangulation(obj):
@@ -121,13 +111,18 @@ def delaunay_triangulation(obj):
     T = [[1, 2, 3]]
     corners = corner_table.build_corner_table(T)
     for pr in vertex:
+        plot_tri(T.copy(), verts.copy())
+
+        global ax1
+        ax1.scatter(pr[0],pr[1],color='r')
+        plt.pause(0.05)
         ins, t, aresta = inside(pr, verts, corners, T)
         if ins:
-            verts.append(pr)
+            verts.append(list(pr))
             pr = len(verts)
             pi, pj, pk = t
             t1 = [pi, pj, pr]
-            t2 = [pj, pk, pr]
+            t2 = [pr, pj, pk]
             t3 = [pi, pr, pk]
             T.remove(t)
             T.append(t1)
@@ -139,19 +134,35 @@ def delaunay_triangulation(obj):
             legalize_aresta(pr, [pj,pk], t2, T, corners, verts)
             legalize_aresta(pr, [pk,pi], t3, T, corners, verts)
         elif len(aresta) == 2:
-            pi, pj, pk = t
-            pr = list(pr)
-            pl, tri = oposto([pi,pj], t, T)
-            #TODO: verificar oque fazer nesse caso, quando nao tem oposto e o 
-            # ponto esta encima de uma aresta da borda
-            if len(pl) == 0:
-                continue 
+            verts.append(list(pr))
+            pr = len(verts)
+
+            pi, pj = aresta 
+            #pk recebe 3º vert do tri
+            pk = np.asarray(t)
+            pk = np.delete(pk, np.where(pk==aresta[0]))
+            pk = list(np.delete(pk, np.where(pk==aresta[1])))[0]
+            
+            cs = find_tri_corners(find_tri_index(t, T), corners) # verificar permutações do tri
+    
+            pl = -1
+            trian = len(T) + 1 
+            for c in cs:
+                if c.c_v == pk:
+                    pl = -1 if c.c_o == -1 else corners[c.c_o - 1].c_v
+                    trian = corners[c.c_o - 1].c_t
+                    break
+            
+            if pl == -1:
+                return
+
+
             #achar outro tri que compartilha pi, pj
-            t1 = [pl, pr, pi]
-            t2 = [pl, pj, pr]
-            t3 = [pj, pk, pr]
-            t4 = [pk, pi, pr]
-            T.remove(tri)
+            t1 = [pj, pk, pr]
+            t2 = [pk, pi, pr]
+            t3 = [pi, pl, pr]
+            t4 = [pl, pj, pr]
+            T.remove(T[trian-1])
             T.remove(t)
             T.append(t1)
             T.append(t2)
@@ -159,10 +170,10 @@ def delaunay_triangulation(obj):
             T.append(t4)
             corners = corner_table.build_corner_table(T)
 
-            legalize_aresta(pr, [pi, pl], t1, T, corners, verts)
-            legalize_aresta(pr, [pl, pj], t2, T, corners, verts)
-            legalize_aresta(pr, [pk, pk], t3, T, corners, verts)
-            legalize_aresta(pr, [pk, pi], t4, T, corners, verts) 
+            legalize_aresta(pk, [pi, pl], t1, T, corners, verts)
+            legalize_aresta(pk, [pl, pj], t2, T, corners, verts)
+            legalize_aresta(pk, [pk, pk], t3, T, corners, verts)
+            legalize_aresta(pk, [pk, pi], t4, T, corners, verts) 
     for t in T:
         for v in t:
             v = np.asarray(v)
@@ -174,9 +185,6 @@ def delaunay_triangulation(obj):
 
 def main ():
     objs = OBJ.read_OBJ("./OBJ/")
-    fig1, ax1 = plt.subplots()
-    ax1.set_aspect('equal')
-    ax1.set_title('triplot of Delaunay triangulation')
     for obj in objs:        
         corners = corner_table.build_corner_table(obj.faces)
         
