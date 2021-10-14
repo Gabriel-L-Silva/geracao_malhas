@@ -11,12 +11,12 @@ ax1.set_title('triplot of Delaunay triangulation')
 
 def find_tri_corners(idx_tri, corners):
     for idx in range(0,len(corners),3):
-        if corners[idx].c_t == idx_tri + 1:
+        if corners[idx].c_t == (idx_tri + 1):
             return [corners[idx], corners[corners[idx].c_n - 1], corners[corners[idx].c_p - 1]]
 
 def inside(pr, verts, corners, T):
-    for idx_t, tri in enumerate(T):
-        tr_c = find_tri_corners(idx_t, corners)
+    for tri in T:
+        tr_c = find_tri_corners(T.index(tri), corners)
 
         A = [[1,1,1],
                 [verts[tr_c[0].c_v - 1][0], verts[tr_c[1].c_v - 1][0], verts[tr_c[2].c_v - 1][0]],
@@ -67,22 +67,25 @@ def legalize_aresta(pr, aresta, t, T, corners, verts):
             pl = -1 if c.c_o == -1 else corners[c.c_o - 1].c_v
             trian = corners[c.c_o - 1].c_t
     if pl == -1:
-        return
+        return corners
 
     #POssivel erro aq, flipa mas nao apaga as outras aresta(?)
     if aresta_ilegal(aresta, t, pl, verts):
-        pi,pj,pk = t
+        pi, pj = aresta
+        pk = pl
         T.remove(t)
         T.remove(T[trian-1])
 
-        t1 = [pi, pl, pk]
-        t2 = [pk, pl, pj]
+        t1 = [pi, pk, pr]
+        t2 = [pk, pj, pr]
         T.append(t1)
         T.append(t2)
         corners = corner_table.build_corner_table(T)
 
-        legalize_aresta(pl, [pi,pk], t1, T, corners, verts)
-        legalize_aresta(pl, [pk,pj], t2, T, corners, verts)
+        corners = legalize_aresta(pr, [pi,pk], t1, T, corners, verts)
+        corners = legalize_aresta(pr, [pk,pj], t2, T, corners, verts)
+
+    return corners
 
 def plot_tri(faces, vertex):
     global ax1
@@ -90,7 +93,7 @@ def plot_tri(faces, vertex):
     faces = np.asarray(faces)-1
     vertex = np.asarray(vertex)
     ax1.clear()
-    ax1.scatter(vertex[:,0], vertex[:,1], color='r')
+    ax1.scatter(vertex[3:,0], vertex[3:,1], color='r')
     ax1.triplot(vertex[:,0], vertex[:,1], triangles = faces, color='k')
     plt.pause(0.05)
 
@@ -128,22 +131,24 @@ def delaunay_triangulation(obj):
             T.append(t1)
             T.append(t2)
             T.append(t3)
+
+            ax1.triplot(np.asarray(verts)[:,0], np.asarray(verts)[:,1], triangles = np.asarray(T[-3:])-1, color='r')
             corners = corner_table.build_corner_table(T)
 
-            legalize_aresta(pr, [pi,pj], t1, T, corners, verts)
-            legalize_aresta(pr, [pj,pk], t2, T, corners, verts)
-            legalize_aresta(pr, [pk,pi], t3, T, corners, verts)
+            corners = legalize_aresta(pr, [pi,pj], t1, T, corners, verts)
+            corners = legalize_aresta(pr, [pj,pk], t2, T, corners, verts)
+            corners = legalize_aresta(pr, [pk,pi], t3, T, corners, verts)
         elif len(aresta) == 2:
             verts.append(list(pr))
             pr = len(verts)
 
             pi, pj = aresta 
-            #pk recebe 3º vert do tri
+
             pk = np.asarray(t)
             pk = np.delete(pk, np.where(pk==aresta[0]))
             pk = list(np.delete(pk, np.where(pk==aresta[1])))[0]
             
-            cs = find_tri_corners(find_tri_index(t, T), corners) # verificar permutações do tri
+            cs = find_tri_corners(find_tri_index(t, T), corners)
     
             pl = -1
             trian = len(T) + 1 
@@ -156,8 +161,6 @@ def delaunay_triangulation(obj):
             if pl == -1:
                 return
 
-
-            #achar outro tri que compartilha pi, pj
             t1 = [pj, pk, pr]
             t2 = [pk, pi, pr]
             t3 = [pi, pl, pr]
@@ -174,18 +177,25 @@ def delaunay_triangulation(obj):
             legalize_aresta(pk, [pl, pj], t2, T, corners, verts)
             legalize_aresta(pk, [pk, pk], t3, T, corners, verts)
             legalize_aresta(pk, [pk, pi], t4, T, corners, verts) 
-    for t in T:
-        for v in t:
-            v = np.asarray(v)
-            if (v == pa).all() or (v == pb).all() or (v == pc).all():
-                T.remove(t)
-                break
+    plot_tri(T.copy(), verts.copy())
+    copy_T = T.copy()
+    for t in copy_T:
+        if 1 in t:
+            T.remove(t)
+            continue
+        if 2 in t:
+            T.remove(t)
+            continue
+        if 3 in t:
+            T.remove(t)
+            continue
+    plot_tri(T.copy(), verts.copy())
     plt.show(block=True)
     return T
 
 def main ():
     objs = OBJ.read_OBJ("./OBJ/")
-    for obj in objs:        
+    for obj in objs:  
         corners = corner_table.build_corner_table(obj.faces)
         
         #TODO usar corner table na triangulação
