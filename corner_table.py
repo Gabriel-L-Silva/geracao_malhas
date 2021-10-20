@@ -3,6 +3,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 import obj as OBJ
 from tqdm import tqdm
+import cProfile
+import pstats
 
 class Corner:
     def __init__(self, corner=-1, c_v=-1, c_t=-1, c_n=-1, c_p=-1, c_o=-1, c_r=-1, c_l=-1) -> None:
@@ -18,24 +20,42 @@ class Corner:
     def __repr__(self) -> str:
         return f'c:{self.corner}, v:{self.c_v}, t:{self.c_t}, n:{self.c_n}, p:{self.c_p}, o:{self.c_o}, r:{self.c_r}, l:{self.c_l}'
 
-def find_opposite(corners, faces):
+def find_tri_corners(idx, corners):
+    return [corners[3*idx], corners[corners[3*idx].c_n - 1], corners[corners[3*idx].c_p - 1]]
 
-    for corner in corners:
+def find_opposite(corners, faces):
+    for corner in tqdm(corners):
+        if corner.c_o != -1:
+            continue
+
         f = faces[corner.c_t - 1]
         remaining = np.delete(f, np.where(f==corner.c_v))
-        for face in faces:
+        for idx, face in enumerate(faces):
             if (f == face).all():
                 continue
             
-            inter = np.intersect1d(f,face)
-            if len(inter) == 2 and (inter == remaining).all():
-                face_copy = face.copy()
-                for number in inter:
-                    face_copy = np.delete(face_copy, np.where(face_copy==number))
-                vert_op = face_copy[0]
-                for c in corners:
-                    if c.c_v == vert_op and (faces[c.c_t - 1] == face).all():
-                        corner.c_o = c.corner
+            cs = find_tri_corners(idx, corners)
+
+            if cs[0].c_v == remaining[0] and cs[1].c_v == remaining[1] or cs[1].c_v == remaining[0] and cs[0].c_v == remaining[1]:
+                corner.c_o = cs[2].corner
+                cs[2].c_o = corner.corner
+            elif cs[1].c_v == remaining[0] and cs[2].c_v == remaining[1] or cs[2].c_v == remaining[0] and cs[1].c_v == remaining[1]:
+                corner.c_o = cs[0].corner
+                cs[0].c_o = corner.corner
+            elif cs[2].c_v == remaining[0] and cs[0].c_v == remaining[1] or cs[0].c_v == remaining[0] and cs[2].c_v == remaining[1]:
+                corner.c_o = cs[1].corner
+                cs[1].c_o = corner.corner
+
+            # inter = np.intersect1d(f,face)
+            # if len(inter) == 2 and (inter == remaining).all():
+            #     face_copy = face.copy()
+            #     for number in inter:
+            #         face_copy = np.delete(face_copy, np.where(face_copy==number))
+            #     vert_op = face_copy[0]
+            #     for c in corners:
+            #         if c.c_v == vert_op and (faces[c.c_t - 1] == face).all():
+            #             corner.c_o = c.corner
+            #             c.c_o = corner.corner
 
 def find_right_left(corners):
     for corner in corners:
@@ -65,10 +85,20 @@ def build_corner_table(faces):
 def main ():
     objs = OBJ.read_OBJ("./OBJ/")
     for obj in objs:
+        if obj.name != "sphere.obj":
+            continue
         corners = build_corner_table(obj.faces)
 
-        for c in corners:
-            print(c)
+        # plt.triplot(np.asarray(obj.vertex)[:,0],np.asarray(obj.vertex)[:,1], np.asarray(obj.faces)-1)
+        # for idx, vert in enumerate(obj.vertex):
+        #     plt.text(vert[0],vert[1], str(idx+1))
+        # plt.show()
+        # for c in corners:
+        #     print(c)
 
 if __name__ == '__main__':
-    main()
+    profile = cProfile.Profile()
+    profile.runcall(main)
+    ps = pstats.Stats(profile)
+    ps.print_stats()
+    # main()

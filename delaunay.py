@@ -9,10 +9,8 @@ fig1, ax1 = plt.subplots()
 ax1.set_aspect('equal')
 ax1.set_title('triplot of Delaunay triangulation')
 
-def find_tri_corners(idx_tri, corners):
-    for idx in range(0,len(corners),3):
-        if corners[idx].c_t == (idx_tri + 1):
-            return [corners[idx], corners[corners[idx].c_n - 1], corners[corners[idx].c_p - 1]]
+def find_tri_corners(idx, corners):
+    return [corners[3*idx], corners[corners[3*idx].c_n - 1], corners[corners[3*idx].c_p - 1]]
 
 def inside(pr, verts, corners, T):
     for tri in T:
@@ -113,8 +111,8 @@ def delaunay_triangulation(obj):
     verts = [pa,pb,pc]
     T = [[1, 2, 3]]
     corners = corner_table.build_corner_table(T)
-    for pr in vertex:
-        plot_tri(T.copy(), verts.copy())
+    for pr in reversed(vertex):
+        # plot_tri(T.copy(), verts.copy())
 
         global ax1
         ax1.scatter(pr[0],pr[1],color='r')
@@ -172,12 +170,13 @@ def delaunay_triangulation(obj):
             T.append(t3)
             T.append(t4)
             corners = corner_table.build_corner_table(T)
-
-            legalize_aresta(pk, [pi, pl], t1, T, corners, verts)
-            legalize_aresta(pk, [pl, pj], t2, T, corners, verts)
-            legalize_aresta(pk, [pk, pk], t3, T, corners, verts)
-            legalize_aresta(pk, [pk, pi], t4, T, corners, verts) 
-    plot_tri(T.copy(), verts.copy())
+            
+            ax1.triplot(np.asarray(verts)[:,0], np.asarray(verts)[:,1], triangles = np.asarray(T[-4:])-1, color='r')
+            corners = legalize_aresta(pr, [pj, pk], t1, T, corners, verts)
+            corners = legalize_aresta(pr, [pi, pk], t2, T, corners, verts)
+            corners = legalize_aresta(pr, [pi, pl], t3, T, corners, verts)
+            corners = legalize_aresta(pr, [pl, pj], t4, T, corners, verts) 
+    # plot_tri(T.copy(), verts.copy())
     copy_T = T.copy()
     for t in copy_T:
         if 1 in t:
@@ -196,6 +195,8 @@ def delaunay_triangulation(obj):
 def main ():
     objs = OBJ.read_OBJ("./OBJ/")
     for obj in objs:  
+        if obj.name != "small_disk.obj":
+            continue
         corners = corner_table.build_corner_table(obj.faces)
         
         #TODO usar corner table na triangulação

@@ -1,7 +1,8 @@
 import os
 
 class OBJ:
-    def __init__(self, v, f) -> None:
+    def __init__(self, name, v, f) -> None:
+        self.name = name
         self.vertex = v
         self.faces = f
     
@@ -11,9 +12,6 @@ class OBJ:
 def read_OBJ(path):
     objs = []
     for file in os.listdir(path):
-        if file != "small_disk.obj":
-            continue
-
         with open(path+file, 'r') as f:
             vertex = []
             faces = []
@@ -23,5 +21,5 @@ def read_OBJ(path):
                     vertex.append(list(map(float,l[1:])))
                 elif l[0] == 'f':
                     faces.append(list(map(int,l[1:])))
-            objs.append(OBJ(vertex,faces))
+            objs.append(OBJ(file, vertex, faces))
     return objs
