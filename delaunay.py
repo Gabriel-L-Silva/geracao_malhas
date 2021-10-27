@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 import obj as OBJ
 import corner_table
 from itertools import permutations
+from math import sqrt
 
 fig1, ax1 = plt.subplots()
 ax1.set_aspect('equal')
@@ -55,7 +56,21 @@ def find_tri_index(t, T):
             t = list(p)
             return T.index(list(p))
 
-def legalize_aresta(pr, aresta, t, T, corners, verts):
+#TODO: Testar isoladamente
+def in_circle(aresta, verts):
+    P1 = verts[aresta[0]-1]
+    P2 = verts[aresta[1]-1]
+    a = (P1[0] + P2[0]) / 2
+    b = (P1[1] + P2[1]) / 2
+    r = [P1[0]-P2[0], P1[1]-P2[1]]
+    r = sqrt(r[0]**2+r[1]**2)/2
+
+    for v in verts:
+        if (v[0] - a)**2 + (v[1]-b)**2 <= r**2:
+            return True
+    return False
+
+def legalize_aresta(pr, aresta, arestas_restritas, t, T, corners, verts):
     cs = find_tri_corners(find_tri_index(t, T), corners) # verificar permutações do tri
     
     pl = -1
@@ -66,9 +81,9 @@ def legalize_aresta(pr, aresta, t, T, corners, verts):
             trian = corners[c.c_o - 1].c_t
     if pl == -1:
         return corners
-
-    #POssivel erro aq, flipa mas nao apaga as outras aresta(?)
-    if aresta_ilegal(aresta, t, pl, verts):
+        
+    # TODO: muda restrição para depois da criação da triangulação, paper: a fast algorithm for generating constrained delaunay triangulations. S. W. Sloan
+    if aresta_ilegal(aresta, t, pl, verts) and not (tuple(aresta) in arestas_restritas or tuple([aresta[1],aresta[0]]) in arestas_restritas) or in_circle(aresta, verts):
         pi, pj = aresta
         pk = pl
         T.remove(t)
@@ -80,8 +95,8 @@ def legalize_aresta(pr, aresta, t, T, corners, verts):
         T.append(t2)
         corners = corner_table.build_corner_table(T)
 
-        corners = legalize_aresta(pr, [pi,pk], t1, T, corners, verts)
-        corners = legalize_aresta(pr, [pk,pj], t2, T, corners, verts)
+        corners = legalize_aresta(pr, [pi,pk], arestas_restritas, t1, T, corners, verts)
+        corners = legalize_aresta(pr, [pk,pj], arestas_restritas, t2, T, corners, verts)
 
     return corners
 
@@ -95,7 +110,7 @@ def plot_tri(faces, vertex):
     ax1.triplot(vertex[:,0], vertex[:,1], triangles = faces, color='k')
     plt.pause(0.05)
 
-def delaunay_triangulation(obj):
+def delaunay_triangulation(obj, arestas_restritas):
     vertex = np.array(obj.vertex)
     faces = np.asarray(obj.faces)
 
@@ -115,7 +130,7 @@ def delaunay_triangulation(obj):
         # plot_tri(T.copy(), verts.copy())
 
         global ax1
-        ax1.scatter(pr[0],pr[1],color='r')
+        # ax1.scatter(pr[0],pr[1],color='r')
         plt.pause(0.05)
         ins, t, aresta = inside(pr, verts, corners, T)
         if ins:
@@ -130,15 +145,20 @@ def delaunay_triangulation(obj):
             T.append(t2)
             T.append(t3)
 
-            ax1.triplot(np.asarray(verts)[:,0], np.asarray(verts)[:,1], triangles = np.asarray(T[-3:])-1, color='r')
+            # ax1.triplot(np.asarray(verts)[:,0], np.asarray(verts)[:,1], triangles = np.asarray(T[-3:])-1, color='r')
             corners = corner_table.build_corner_table(T)
 
-            corners = legalize_aresta(pr, [pi,pj], t1, T, corners, verts)
-            corners = legalize_aresta(pr, [pj,pk], t2, T, corners, verts)
-            corners = legalize_aresta(pr, [pk,pi], t3, T, corners, verts)
+            corners = legalize_aresta(pr, [pi,pj], arestas_restritas, t1, T, corners, verts)
+            corners = legalize_aresta(pr, [pj,pk], arestas_restritas, t2, T, corners, verts)
+            corners = legalize_aresta(pr, [pk,pi], arestas_restritas, t3, T, corners, verts)
         elif len(aresta) == 2:
             verts.append(list(pr))
             pr = len(verts)
+
+            if tuple(aresta) in arestas_restritas:
+                arestas_restritas.remove(tuple(aresta))
+                arestas_restritas.append(tuple(aresta[0], pr))
+                arestas_restritas.append(tuple(pr, aresta[1]))
 
             pi, pj = aresta 
 
@@ -171,11 +191,11 @@ def delaunay_triangulation(obj):
             T.append(t4)
             corners = corner_table.build_corner_table(T)
             
-            ax1.triplot(np.asarray(verts)[:,0], np.asarray(verts)[:,1], triangles = np.asarray(T[-4:])-1, color='r')
-            corners = legalize_aresta(pr, [pj, pk], t1, T, corners, verts)
-            corners = legalize_aresta(pr, [pi, pk], t2, T, corners, verts)
-            corners = legalize_aresta(pr, [pi, pl], t3, T, corners, verts)
-            corners = legalize_aresta(pr, [pl, pj], t4, T, corners, verts) 
+            # ax1.triplot(np.asarray(verts)[:,0], np.asarray(verts)[:,1], triangles = np.asarray(T[-4:])-1, color='r')
+            corners = legalize_aresta(pr, [pj, pk], arestas_restritas, t1, T, corners, verts)
+            corners = legalize_aresta(pr, [pi, pk], arestas_restritas, t2, T, corners, verts)
+            corners = legalize_aresta(pr, [pi, pl], arestas_restritas, t3, T, corners, verts)
+            corners = legalize_aresta(pr, [pl, pj], arestas_restritas, t4, T, corners, verts) 
     # plot_tri(T.copy(), verts.copy())
     copy_T = T.copy()
     for t in copy_T:
@@ -189,18 +209,23 @@ def delaunay_triangulation(obj):
             T.remove(t)
             continue
     plot_tri(T.copy(), verts.copy())
+    for idx,x in enumerate(verts):
+        plt.text(x[0], x[1], str(idx+1),color='g')
     plt.show(block=True)
     return T
 
 def main ():
     objs = OBJ.read_OBJ("./OBJ/")
     for obj in objs:  
+        arestas = []
         if obj.name != "small_disk.obj":
             continue
         corners = corner_table.build_corner_table(obj.faces)
-        
-        #TODO usar corner table na triangulação
-        faces = delaunay_triangulation(obj)
+        l = input().rstrip().split(',') # entrada:v1,v2,v3,v4
+        arestas.append(list(map(int,l)))
+        arestas = [tuple(x) for x in np.asarray(arestas).reshape(-1,2)]
+
+        faces = delaunay_triangulation(obj, arestas)
 
 if __name__ == '__main__':
     main()

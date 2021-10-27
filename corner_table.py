@@ -30,11 +30,11 @@ def find_opposite(corners, faces):
 
         f = faces[corner.c_t - 1]
         remaining = np.delete(f, np.where(f==corner.c_v))
-        for idx, face in enumerate(faces):
+        for idx, face in enumerate(reversed(faces)):
             if (f == face).all():
                 continue
             
-            cs = find_tri_corners(idx, corners)
+            cs = find_tri_corners(len(faces)-idx-1, corners)
 
             if cs[0].c_v == remaining[0] and cs[1].c_v == remaining[1] or cs[1].c_v == remaining[0] and cs[0].c_v == remaining[1]:
                 corner.c_o = cs[2].corner
@@ -89,10 +89,10 @@ def main ():
             continue
         corners = build_corner_table(obj.faces)
 
-        # plt.triplot(np.asarray(obj.vertex)[:,0],np.asarray(obj.vertex)[:,1], np.asarray(obj.faces)-1)
+        plt.triplot(np.asarray(obj.vertex)[:,0],np.asarray(obj.vertex)[:,1], np.asarray(obj.faces)-1)
         # for idx, vert in enumerate(obj.vertex):
         #     plt.text(vert[0],vert[1], str(idx+1))
-        # plt.show()
+        plt.show(block=True)
         # for c in corners:
         #     print(c)
 
