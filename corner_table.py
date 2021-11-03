@@ -2,7 +2,7 @@ import os
 import numpy as np
 import matplotlib.pyplot as plt
 import obj as OBJ
-from tqdm import tqdm
+# from tqdm import tqdm
 import cProfile
 import pstats
 
@@ -24,7 +24,7 @@ def find_tri_corners(idx, corners):
     return [corners[3*idx], corners[corners[3*idx].c_n - 1], corners[corners[3*idx].c_p - 1]]
 
 def find_opposite(corners, faces):
-    for corner in tqdm(corners):
+    for corner in corners:
         if corner.c_o != -1:
             continue
 

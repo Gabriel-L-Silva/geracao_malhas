@@ -1,10 +1,14 @@
 import os
 import numpy as np
 import matplotlib.pyplot as plt
+from numpy.lib.function_base import insert
 import obj as OBJ
 import corner_table
 from itertools import permutations
 from math import sqrt
+import intersect_edges
+import convex
+import queue
 
 fig1, ax1 = plt.subplots()
 ax1.set_aspect('equal')
@@ -83,7 +87,7 @@ def legalize_aresta(pr, aresta, arestas_restritas, t, T, corners, verts):
         return corners
         
     # TODO: muda restrição para depois da criação da triangulação, paper: a fast algorithm for generating constrained delaunay triangulations. S. W. Sloan
-    if aresta_ilegal(aresta, t, pl, verts) and not (tuple(aresta) in arestas_restritas or tuple([aresta[1],aresta[0]]) in arestas_restritas) or in_circle(aresta, verts):
+    if aresta_ilegal(aresta, t, pl, verts) and not (tuple(aresta) in arestas_restritas or tuple([aresta[1],aresta[0]]) in arestas_restritas):
         pi, pj = aresta
         pk = pl
         T.remove(t)
@@ -197,22 +201,165 @@ def delaunay_triangulation(obj, arestas_restritas):
             corners = legalize_aresta(pr, [pi, pl], arestas_restritas, t3, T, corners, verts)
             corners = legalize_aresta(pr, [pl, pj], arestas_restritas, t4, T, corners, verts) 
     # plot_tri(T.copy(), verts.copy())
-    copy_T = T.copy()
+    #Remove supertriangle
+    # copy_T = T.copy()
+    # for t in copy_T:
+    #     if 1 in t:
+    #         T.remove(t)
+    #         continue
+    #     if 2 in t:
+    #         T.remove(t)
+    #         continue
+    #     if 3 in t:
+    #         T.remove(t)
+    #         continue
+    # plot_tri(T.copy(), verts.copy())
+    return T, corner_table.build_corner_table(T), verts
+
+def flip_aresta():
+    pass
+
+def find_vert_corners_opposite(vert, corners):
+    co = []
+    for c in corners:
+        if c.c_v == vert:
+            if c.c_o != -1:
+                co.append(c.c_o)
+    return co
+
+def find_intersecting_edges(edge, edges, verts):
+    int_edges = []
+    for e in edges:
+        if intersect_edges.doIntersect(verts[e[0]-1], verts[e[1]-1], verts[edge[0]-1], verts[edge[1]-1]):
+            if e[0] != edge[0] and e[0] != edge[1] and e[1] != edge[0] and e[1] != edge[1] and e[0] < e[1]:
+                int_edges.append(e)
+    return int_edges
+
+def find_edges(T):
+    edges = set()
+    for index, t in enumerate(T):
+        edges.add(tuple([t[0],t[1]]))
+        edges.add(tuple([t[1],t[2]]))
+        edges.add(tuple([t[2],t[0]]))
+    return edges
+
+def delaunay_restriction(faces, corners, restritas, verts):
+    edges = find_edges(faces)
+    for aresta in restritas:
+        arestas_novas = []
+        if aresta in edges:
+            continue
+        #achar arestas que intersectam
+        inter_edges = find_intersecting_edges(aresta, edges, verts)
+        
+        fila = queue.Queue()
+        for i in inter_edges:
+            fila.put(i)
+
+        while not fila.empty():
+            tri1 = []
+            tri2 = []
+            pk = 0
+            pl = 0
+            
+            i_edge = fila.get()
+            pi, pj = i_edge
+            insert_back = False
+            
+            #3.1
+            inter_edges.remove(i_edge)
+            
+            #3.2
+            for f_idx, f in enumerate(faces):
+                inter = np.intersect1d(f,i_edge)
+                
+                
+                pk = np.delete(f, np.where(f==i_edge[0]))
+                pk = list(np.delete(pk, np.where(pk==i_edge[1])))[0]
+                if len(inter) == 2 and ((inter == i_edge).all() or (inter == np.flip(i_edge)).all()):
+                    cs = find_tri_corners(f_idx, corners)
+                    for corner in cs:
+                        if corner.c_v not in i_edge:
+                            tri1 = faces[f_idx]
+                            tri2 = faces[corners[corner.c_o-1].c_t-1]
+                            pl = corners[corner.c_o-1].c_v
+                            a = verts[corner.c_v - 1]
+                            b = verts[corners[corner.c_n-1].c_v-1]
+                            c = verts[corners[corner.c_o-1].c_v-1]
+                            d = verts[corners[corner.c_p-1].c_v-1]
+
+                            if not convex.isConvex([ a,b,c,d ]):
+                                insert_back = True
+                                break
+                    break
+
+            if insert_back:
+                fila.put(i_edge)
+                continue
+            else:
+                #flipa aresta
+                faces.remove(tri1)
+                faces.remove(tri2)
+                faces.append([pi,pk,pl])
+                faces.append([pk,pj,pl])
+
+                corners = corner_table.build_corner_table(faces)
+
+                if intersect_edges.doIntersect(verts[pl-1], verts[pk-1], verts[aresta[0]-1], verts[aresta[1]-1]):
+                    if pl != aresta[0] and pl != aresta[1] and pk != aresta[0] and pk != aresta[1]:
+                        fila.put([pl,pk])
+                    else:
+                        arestas_novas.append([pl,pk])
+                else:
+                    arestas_novas.append([pl,pk])
+
+        #4.1
+        for idx, n_edge in enumerate(arestas_novas):
+            #4.2
+            if n_edge == list(aresta):
+                continue
+            pi, pj = n_edge
+            #4.3
+            for f_idx, f in enumerate(faces):
+                inter = np.intersect1d(f,aresta)
+                
+                
+                pk = np.delete(f, np.where(f==i_edge[0]))
+                pk = list(np.delete(pk, np.where(pk==i_edge[1])))[0]
+                if len(inter) == 2 and ((inter == i_edge).all() or (inter == np.flip(i_edge)).all()):
+                    cs = find_tri_corners(f_idx, corners)
+                    for c in cs:
+                        if c not in i_edge:
+                            pl = corners[c.c_o - 1].c_v
+            if aresta_ilegal(n_edge, [pi,pj,pk], pl, verts):
+                faces.remove([pi,pj,pk])
+                faces.remove(faces[find_tri_index([pi,pj,pl],faces)-1])
+                faces.append([pi,pk,pl])
+                faces.append([pk,pj,pl])
+                arestas_novas[idx] = [pk,pl]
+
+                corners = corner_table.build_corner_table(faces)
+
+    #remove supertriangle
+    copy_T = faces.copy()
     for t in copy_T:
         if 1 in t:
-            T.remove(t)
+            faces.remove(t)
             continue
         if 2 in t:
-            T.remove(t)
+            faces.remove(t)
             continue
         if 3 in t:
-            T.remove(t)
+            faces.remove(t)
             continue
-    plot_tri(T.copy(), verts.copy())
+    corners = corner_table.build_corner_table(faces)
+    plot_tri(faces.copy(), verts.copy())
     for idx,x in enumerate(verts):
         plt.text(x[0], x[1], str(idx+1),color='g')
-    plt.show(block=True)
-    return T
+    plt.show()
+    return faces, corners, verts
+
+            
 
 def main ():
     objs = OBJ.read_OBJ("./OBJ/")
@@ -225,7 +372,11 @@ def main ():
         arestas.append(list(map(int,l)))
         arestas = [tuple(x) for x in np.asarray(arestas).reshape(-1,2)]
 
-        faces = delaunay_triangulation(obj, arestas)
+        faces, corners, verts = delaunay_triangulation(obj, arestas)
+        faces, corners, verts = delaunay_restriction(faces, corners, arestas, verts)
+        
+        
+
 
 if __name__ == '__main__':
     main()
