@@ -274,7 +274,7 @@ def delaunay_restriction(faces, corners, restritas, verts):
                 inter = np.intersect1d(f,i_edge)
                 
                 
-                pk = np.delete(f, np.where(f==i_edge[0]))
+                pk = np.delete(f, np.where(np.asarray(f)==i_edge[0]))
                 pk = list(np.delete(pk, np.where(pk==i_edge[1])))[0]
                 if len(inter) == 2 and ((inter == i_edge).all() or (inter == np.flip(i_edge)).all()):
                     cs = find_tri_corners(f_idx, corners)
@@ -295,6 +295,7 @@ def delaunay_restriction(faces, corners, restritas, verts):
 
             if insert_back:
                 fila.put(i_edge)
+                inter_edges.append(i_edge)
                 continue
             else:
                 #flipa aresta
@@ -307,7 +308,8 @@ def delaunay_restriction(faces, corners, restritas, verts):
 
                 if intersect_edges.doIntersect(verts[pl-1], verts[pk-1], verts[aresta[0]-1], verts[aresta[1]-1]):
                     if pl != aresta[0] and pl != aresta[1] and pk != aresta[0] and pk != aresta[1]:
-                        fila.put([pl,pk])
+                        fila.put((pl,pk))
+                        inter_edges.append((pl,pk))
                     else:
                         arestas_novas.append([pl,pk])
                 else:
@@ -357,6 +359,7 @@ def delaunay_restriction(faces, corners, restritas, verts):
     for idx,x in enumerate(verts):
         plt.text(x[0], x[1], str(idx+1),color='g')
     plt.show()
+    plt.pause(0.05)
     return faces, corners, verts
 
             
