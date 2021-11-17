@@ -10,10 +10,6 @@ import intersect_edges
 import convex
 import queue
 
-fig1, ax1 = plt.subplots()
-ax1.set_aspect('equal')
-ax1.set_title('triplot of Delaunay triangulation')
-
 def find_tri_corners(idx, corners):
     return [corners[3*idx], corners[corners[3*idx].c_n - 1], corners[corners[3*idx].c_p - 1]]
 
@@ -104,9 +100,7 @@ def legalize_aresta(pr, aresta, arestas_restritas, t, T, corners, verts):
 
     return corners
 
-def plot_tri(faces, vertex):
-    global ax1
-
+def plot_tri(faces, vertex, ax1):
     faces = np.asarray(faces)-1
     vertex = np.asarray(vertex)
     ax1.clear()
@@ -114,7 +108,7 @@ def plot_tri(faces, vertex):
     ax1.triplot(vertex[:,0], vertex[:,1], triangles = faces, color='k')
     plt.pause(0.05)
 
-def delaunay_triangulation(obj, arestas_restritas):
+def delaunay_triangulation(obj, arestas_restritas, ax1):
     vertex = np.array(obj.vertex)
     faces = np.asarray(obj.faces)
 
@@ -131,9 +125,8 @@ def delaunay_triangulation(obj, arestas_restritas):
     T = [[1, 2, 3]]
     corners = corner_table.build_corner_table(T)
     for pr in reversed(vertex):
-        # plot_tri(T.copy(), verts.copy())
+        # plot_tri(T.copy(), verts.copy(), ax1)
 
-        global ax1
         # ax1.scatter(pr[0],pr[1],color='r')
         plt.pause(0.05)
         ins, t, aresta = inside(pr, verts, corners, T)
@@ -200,7 +193,7 @@ def delaunay_triangulation(obj, arestas_restritas):
             corners = legalize_aresta(pr, [pi, pk], arestas_restritas, t2, T, corners, verts)
             corners = legalize_aresta(pr, [pi, pl], arestas_restritas, t3, T, corners, verts)
             corners = legalize_aresta(pr, [pl, pj], arestas_restritas, t4, T, corners, verts) 
-    # plot_tri(T.copy(), verts.copy())
+    # plot_tri(T.copy(), verts.copy(), ax1)
     #Remove supertriangle
     # copy_T = T.copy()
     # for t in copy_T:
@@ -213,7 +206,7 @@ def delaunay_triangulation(obj, arestas_restritas):
     #     if 3 in t:
     #         T.remove(t)
     #         continue
-    # plot_tri(T.copy(), verts.copy())
+    # plot_tri(T.copy(), verts.copy(), ax1)
     return T, corner_table.build_corner_table(T), verts
 
 def flip_aresta():
@@ -243,7 +236,7 @@ def find_edges(T):
         edges.add(tuple([t[2],t[0]]))
     return edges
 
-def delaunay_restriction(faces, corners, restritas, verts):
+def delaunay_restriction(faces, corners, restritas, verts, ax1):
     edges = find_edges(faces)
     for aresta in restritas:
         arestas_novas = []
@@ -355,16 +348,12 @@ def delaunay_restriction(faces, corners, restritas, verts):
             faces.remove(t)
             continue
     corners = corner_table.build_corner_table(faces)
-    plot_tri(faces.copy(), verts.copy())
-    for idx,x in enumerate(verts):
-        plt.text(x[0], x[1], str(idx+1),color='g')
-    plt.show()
-    plt.pause(0.05)
     return faces, corners, verts
 
-            
-
 def main ():
+    fig1, ax1 = plt.subplots()
+    ax1.set_aspect('equal')
+    ax1.set_title('triplot of Delaunay triangulation')
     objs = OBJ.read_OBJ("./OBJ/")
     for obj in objs:  
         arestas = []
@@ -375,9 +364,14 @@ def main ():
         arestas.append(list(map(int,l)))
         arestas = [tuple(x) for x in np.asarray(arestas).reshape(-1,2)]
 
-        faces, corners, verts = delaunay_triangulation(obj, arestas)
-        faces, corners, verts = delaunay_restriction(faces, corners, arestas, verts)
-        
+        faces, corners, verts = delaunay_triangulation(obj, arestas, ax1)
+        faces, corners, verts = delaunay_restriction(faces, corners, arestas, verts, ax1)      
+
+        plot_tri(faces.copy(), verts.copy(), ax1)
+        for idx,x in enumerate(verts):
+            plt.text(x[0], x[1], str(idx+1),color='g')
+        plt.show()
+        plt.pause(0.05)  
         
 
 
