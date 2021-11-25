@@ -42,6 +42,7 @@ def angle(a,b):
     return np.arccos(np.dot(a,b) / (length(a) * length(b)))
 
 def met_req(tri, faces, verts):
+    #TODO: verificar se ângulo é formado por arestas de restrição
     a = np.asarray(verts[tri[0]-1]) - np.asarray(verts[tri[1]-1])
     b = np.asarray(verts[tri[1]-1]) - np.asarray(verts[tri[2]-1])
     c = np.asarray(verts[tri[2]-1]) - np.asarray(verts[tri[0]-1])
@@ -64,7 +65,39 @@ def circumcenter(a, b, c):
     uy = ((a[0] * a[0] + a[1] * a[1]) * (c[0] - b[0]) + (b[0] * b[0] + b[1] * b[1]) * (a[0] - c[0]) + (c[0] * c[0] + c[1] * c[1]) * (b[0] - a[0])) / d
     return (ux, uy, 0)
 
-def chew(faces, corners, verts, ax1):    
+def inside_triangulation(pr, tri, faces, verts, corners, ax):
+    a = verts[tri.tri[0]-1]
+    b = verts[tri.tri[1]-1]
+    c = verts[tri.tri[2]-1]
+
+    cs = delaunay.find_tri_corners(tri.index-1, corners)
+    border = False
+    for corner in cs:
+        if corner.c_o == -1:
+            border = True
+            break
+
+    if border and not delaunay.inside(pr, verts, corners, faces)[0]:
+        distAB = length(np.asarray(a) + ((np.asarray(b) - np.asarray(a))/2) - np.asarray(pr))
+        distBC = length(np.asarray(b) + ((np.asarray(c) - np.asarray(b))/2) - np.asarray(pr))
+        distCA = length(np.asarray(c) + ((np.asarray(a) - np.asarray(c))/2) - np.asarray(pr))
+
+        if distAB < distBC:
+            if distAB < distCA:
+                #AB é menor retorna o ponto médio
+                 return False, np.asarray(a) + ((np.asarray(b) - np.asarray(a))/2)
+            else:
+                #CA é menor retorna o ponto médio
+                return False, np.asarray(c) + ((np.asarray(a) - np.asarray(c))/2)
+        elif distBC < distCA:
+            #BC é menor retorna o ponto médio
+            return False, np.asarray(b) + ((np.asarray(c) - np.asarray(b))/2)
+        else:
+            #CA é menor retorna o ponto médio
+            return False, np.asarray(c) + ((np.asarray(a) - np.asarray(c))/2)
+    return True, pr
+
+def chew(faces, corners, verts, ax1, arestas_restritas):    
     q = queue.PriorityQueue()
     
 
@@ -78,25 +111,18 @@ def chew(faces, corners, verts, ax1):
 
         pr = circumcenter(verts[tri.tri[0]-1], verts[tri.tri[1]-1], verts[tri.tri[2]-1])
 
-        verts.append(list(pr))
-        pr = len(verts)
-        pi, pj, pk = tri.tri
-        t1 = [pi, pj, pr]
-        t2 = [pr, pj, pk]
-        t3 = [pi, pr, pk]
-        faces.remove(tri.tri)
-        faces.append(t1)
-        if not met_req(t1,faces,verts):
-            q.put(PrioritizedTri(len(faces), t1, verts))
-        faces.append(t2)
-        if not met_req(t2,faces,verts):
-            q.put(PrioritizedTri(len(faces), t2, verts))
-        faces.append(t3)
-        if not met_req(t3,faces,verts):
-            q.put(PrioritizedTri(len(faces), t3, verts))
+        ax1.scatter(pr[0], pr[1], color='b')
+        plt.pause(0.05)
 
+        inside, pr = inside_triangulation(pr, tri, faces.copy(), verts, corners, ax1)
+
+        corners, faces = delaunay.add_point(pr, verts, corners, faces, arestas_restritas)
+        added_tris = [x for x in faces if len(verts) in x]
+        for t in added_tris:
+            if not met_req(t,faces,verts):
+                q.put(PrioritizedTri(faces.index(t), t, verts))
         # ax1.triplot(np.asarray(verts)[:,0], np.asarray(verts)[:,1], triangles = np.asarray(T[-3:])-1, color='r')
-        corners = corner_table.build_corner_table(faces)
+            
     return faces, corners, verts
 
 def plot_tri(faces, vertex, ax):
@@ -105,6 +131,8 @@ def plot_tri(faces, vertex, ax):
     ax.clear()
     ax.scatter(vertex[3:,0], vertex[3:,1], color='r')
     ax.triplot(vertex[:,0], vertex[:,1], triangles = faces, color='k')
+    for idx,x in enumerate(vertex):
+            plt.text(x[0], x[1], str(idx+1),color='g')
     plt.pause(0.05)
 
 def main ():
@@ -124,7 +152,7 @@ def main ():
 
         faces, corners, verts = delaunay.delaunay_triangulation(obj, arestas, ax1)
         faces, corners, verts = delaunay.delaunay_restriction(faces, corners, arestas, verts, ax1)
-        faces, corners, verts = chew(faces, corners, verts, ax1)
+        faces, corners, verts = chew(faces, corners, verts, ax1, arestas)
         plt.show()
 
 if __name__ == '__main__':
