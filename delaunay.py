@@ -10,6 +10,9 @@ import intersect_edges
 import convex
 import queue
 
+def length(v):
+    return np.sqrt(np.dot(v, v))
+
 def find_tri_corners(idx, corners):
     return [corners[3*idx], corners[corners[3*idx].c_n - 1], corners[corners[3*idx].c_p - 1]]
 
@@ -25,17 +28,20 @@ def inside(pr, verts, corners, T, tri=None):
         b = [1, pr[0], pr[1]]
 
         x = np.linalg.solve(A,b)
-        if abs(x[0]) < 5e-3:
+        #TODO pode ter problema aqui
+        if (x < 0).any():
+            continue
+        elif abs(x[0]) < 1e-3:
             #v2 e v3
             return False, tri, [tri[1], tri[2]]
-        elif abs(x[1]) < 5e-3:
+        elif abs(x[1]) < 1e-3:
             #v3 e v1
             return False, tri, [tri[2], tri[0]]
-        elif abs(x[2]) < 5e-3:
+        elif abs(x[2]) < 1e-3:
             #v1 e v2
             return False, tri, [tri[0], tri[1]]
         elif (x > 0).all():
-            return True, tri, []
+            return True, tri, min(x)
             
     return False, [], []
 
@@ -110,7 +116,7 @@ def plot_tri(faces, vertex, ax1):
     ax1.triplot(vertex[:,0], vertex[:,1], triangles = faces, color='k')
     plt.pause(0.05)
 
-def add_point(pr, verts, corners, T, arestas_restritas):
+def add_point(pr, verts, corners, T, arestas_restritas, h=0):
     # plot_tri(T.copy(), verts.copy(), ax1)
 
     # ax1.scatter(pr[0],pr[1],color='r')
@@ -134,6 +140,9 @@ def add_point(pr, verts, corners, T, arestas_restritas):
         corners = legalize_aresta(pr, [pj,pk], arestas_restritas, t2, T, corners, verts)
         corners = legalize_aresta(pr, [pk,pi], arestas_restritas, t3, T, corners, verts)
     elif len(aresta) == 2:
+        if tuple(aresta) in arestas_restritas and length(np.asarray(aresta[0]) - np.asarray(aresta[1])) <= np.sqrt(3)*h:
+            return corners
+
         verts.append(list(pr))
         pr = len(verts)
 
@@ -166,6 +175,9 @@ def add_point(pr, verts, corners, T, arestas_restritas):
             T.append(t2)
         
             corners = corner_table.build_corner_table(T)
+
+            corners = legalize_aresta(pr, [pk,pi], arestas_restritas, t1, T, corners, verts)
+            corners = legalize_aresta(pr, [pj,pk], arestas_restritas, t2, T, corners, verts)
 
         else:
             t1 = [pj, pk, pr]
