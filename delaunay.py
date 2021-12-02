@@ -16,6 +16,9 @@ def length(v):
 def find_tri_corners(idx, corners):
     return [corners[3*idx], corners[corners[3*idx].c_n - 1], corners[corners[3*idx].c_p - 1]]
 
+def near_zero(x, eps):
+    return np.asarray([y if abs(y) > eps else 0 for y in x])
+
 def inside(pr, verts, corners, T, tri=None):
     if tri != None:
         T = tri
@@ -28,6 +31,7 @@ def inside(pr, verts, corners, T, tri=None):
         b = [1, pr[0], pr[1]]
 
         x = np.linalg.solve(A,b)
+        x = near_zero(x, 10e-5)
         #TODO pode ter problema aqui
         if (x < 0).any():
             continue

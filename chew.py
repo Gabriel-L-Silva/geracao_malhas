@@ -75,18 +75,25 @@ def border(aresta, faces, verts, corners):
                     return True, [pi,pj,pk]
     return False, [pi,pj,pk]
 
-def user_defined(arestas_restritas, h, faces, verts, corners):
+def user_defined(arestas_restritas, h, faces, verts, corners, ax):
     #TODO limitar o tamanho das arestas de borda entre h e raiz de 3h
     # edges = delaunay.find_edges(faces)
     # edges_length = [length(x) for x in [np.asarray(verts[y[0]-1]) - verts[y[1]-1] for y in edges]]
     # h = min(edges_length)
+    fila = queue.Queue()
+
     for aresta in arestas_restritas:
+        fila.put(aresta)
+    
+    while not fila.empty():
+        plot_tri(faces.copy(), verts.copy(), ax)
+        aresta = fila.get()
         bord, tri = border(aresta, faces, verts, corners)
         if bord:
-            if length(np.asarray(verts[aresta[0]-1])- verts[aresta[1]-1]) > h:
+            if length(np.asarray(verts[aresta[0]-1])- verts[aresta[1]-1]) > np.sqrt(3)*h:
                 arestas_restritas.remove(aresta)
                 meio = np.asarray(verts[aresta[1]-1]) + (np.asarray(verts[aresta[0]-1])- np.asarray(verts[aresta[1]-1]))/2
-                verts.append(meio)
+                verts.append(list(meio))
 
                 faces.pop(delaunay.find_tri_index(tri,faces))
                 faces.append([aresta[0], tri[2], len(verts)])
@@ -95,7 +102,9 @@ def user_defined(arestas_restritas, h, faces, verts, corners):
                 corners = corner_table.build_corner_table(faces)
 
                 arestas_restritas.append([aresta[0],len(verts)])
+                fila.put([aresta[0],len(verts)])
                 arestas_restritas.append([len(verts),aresta[1]])
+                fila.put([len(verts),aresta[1]])
 
     return corners
 
@@ -105,7 +114,7 @@ def circumcenter(a, b, c):
     uy = ((a[0] * a[0] + a[1] * a[1]) * (c[0] - b[0]) + (b[0] * b[0] + b[1] * b[1]) * (a[0] - c[0]) + (c[0] * c[0] + c[1] * c[1]) * (b[0] - a[0])) / d
     return (ux, uy, 0)
 
-def inside_triangulation(pr, tri, faces, verts, corners, ax):
+def inside_triangulation(pr, tri, faces, verts, corners, ax, h, arestas_restritas):
     a = verts[tri.tri[0]-1]
     b = verts[tri.tri[1]-1]
     c = verts[tri.tri[2]-1]
@@ -118,14 +127,16 @@ def inside_triangulation(pr, tri, faces, verts, corners, ax):
             break
 
     #TODO verificar se tamanho da aresta esta entre h e (raiz de 3)*h, se estiver maior divide, se tiver no range ignora
+    if (np.asarray([length(np.asarray(b) - np.asarray(a)), length(np.asarray(c) - np.asarray(b)), length(np.asarray(a) - np.asarray(c))]) < np.sqrt(3)*h).all():
+        return False, pr
+
+    distAB = length(np.asarray(a) + ((np.asarray(b) - np.asarray(a))/2) - np.asarray(pr))
+    distBC = length(np.asarray(b) + ((np.asarray(c) - np.asarray(b))/2) - np.asarray(pr))
+    distCA = length(np.asarray(c) + ((np.asarray(a) - np.asarray(c))/2) - np.asarray(pr))
     if not delaunay.inside(pr, verts, corners, faces)[0]:
         if not border: # se circuncentro não é visível
             return False, pr
         else:
-            distAB = length(np.asarray(a) + ((np.asarray(b) - np.asarray(a))/2) - np.asarray(pr))
-            distBC = length(np.asarray(b) + ((np.asarray(c) - np.asarray(b))/2) - np.asarray(pr))
-            distCA = length(np.asarray(c) + ((np.asarray(a) - np.asarray(c))/2) - np.asarray(pr))
-
             if distAB < distBC:
                 if distAB < distCA:
                     #AB é menor retorna o ponto médio
@@ -139,30 +150,52 @@ def inside_triangulation(pr, tri, faces, verts, corners, ax):
             else:
                 #CA é menor retorna o ponto médio
                 return True, np.asarray(c) + ((np.asarray(a) - np.asarray(c))/2)
-    return True, pr
+    else:
+        if distAB < distBC:
+            if distAB < distCA:
+                #AB é menor retorna o ponto médio
+                verts.append(list(np.asarray(a) + ((np.asarray(b) - np.asarray(a))/2)))
+            else:
+                #CA é menor retorna o ponto médio
+                verts.append(list(np.asarray(c) + ((np.asarray(a) - np.asarray(c))/2)))
+        elif distBC < distCA:
+            #BC é menor retorna o ponto médio
+            verts.append(list(np.asarray(b) + ((np.asarray(c) - np.asarray(b))/2)))
+        else:
+            #CA é menor retorna o ponto médio
+            verts.append(list(np.asarray(c) + ((np.asarray(a) - np.asarray(c))/2)))
+        #achar arestas que intersectam
+        verts.append(list(pr))
+        inter_edges = delaunay.find_intersecting_edges([len(verts)-1,len(verts)], arestas_restritas, verts)
+        verts.remove(list(pr))
+        verts.pop(-1)
+        if len(inter_edges) != 0:
+            return False, pr
+        return True, pr
 
 def chew(faces, corners, verts, ax1, arestas_restritas, h):    
     q = queue.PriorityQueue()
-    
-    corners = user_defined(arestas_restritas, h, faces, verts, corners)
+
+    corners = user_defined(arestas_restritas, h, faces, verts, corners, ax1)
     for tri in faces:
         if not met_req(tri, faces, verts, arestas_restritas, h):
             q.put(PrioritizedTri(faces.index(tri)+1, tri, verts))
-
+    plt.pause(0.05)
     while not q.empty():
         plot_tri(faces.copy(), verts.copy(), ax1)
         tri = q.get()
         if tri.tri not in faces:
             continue
-        if met_req(tri,faces,verts,arestas_restritas,h):
+        if met_req(tri.tri,faces,verts,arestas_restritas,h):
             continue
-        
+        if tri.tri == [13,15,32]:
+            print('a')
         pr = circumcenter(verts[tri.tri[0]-1], verts[tri.tri[1]-1], verts[tri.tri[2]-1])
 
         ax1.scatter(pr[0], pr[1], color='b')
         plt.pause(0.05)
 
-        should_add_point, pr = inside_triangulation(pr, tri, faces.copy(), verts, corners, ax1)
+        should_add_point, pr = inside_triangulation(pr, tri, faces.copy(), verts, corners, ax1, h, arestas_restritas)
         
         if not should_add_point:
             continue
@@ -183,7 +216,8 @@ def chew(faces, corners, verts, ax1, arestas_restritas, h):
             if not met_req(t,faces, verts, arestas_restritas, h):
                 q.put(PrioritizedTri(faces.index(t)+1, t, verts))
         # ax1.triplot(np.asarray(verts)[:,0], np.asarray(verts)[:,1], triangles = np.asarray(T[-3:])-1, color='r')
-            
+    plot_tri(faces.copy(), verts.copy(), ax1)
+    plt.pause(0.05)
     return faces, corners, verts
 
 def plot_tri(faces, vertex, ax):
