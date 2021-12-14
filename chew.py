@@ -73,7 +73,7 @@ def border(aresta, faces, verts, corners):
             for c in cs:
                 if c.c_o==-1:
                     return True, [pi,pj,pk]
-    return False, [pi,pj,pk]
+            return False, [pi,pj,pk]
 
 def user_defined(arestas_restritas, h, faces, verts, corners, ax):
     #TODO limitar o tamanho das arestas de borda entre h e raiz de 3h
@@ -98,6 +98,34 @@ def user_defined(arestas_restritas, h, faces, verts, corners, ax):
                 faces.pop(delaunay.find_tri_index(tri,faces))
                 faces.append([aresta[0], tri[2], len(verts)])
                 faces.append([len(verts), tri[2], aresta[1]])
+                
+                corners = corner_table.build_corner_table(faces)
+
+                arestas_restritas.append([aresta[0],len(verts)])
+                fila.put([aresta[0],len(verts)])
+                arestas_restritas.append([len(verts),aresta[1]])
+                fila.put([len(verts),aresta[1]])
+        else:
+            if length(np.asarray(verts[aresta[0]-1])- verts[aresta[1]-1]) > np.sqrt(3)*h:
+                arestas_restritas.remove(aresta)
+                meio = np.asarray(verts[aresta[1]-1]) + (np.asarray(verts[aresta[0]-1])- np.asarray(verts[aresta[1]-1]))/2
+                verts.append(list(meio))
+
+                cs = corner_table.find_tri_corners(delaunay.find_tri_index(tri,faces),corners)
+                pl = -1
+                for c in cs:
+                    if c.c_v not in aresta:
+                        pl = corners[c.c_o -1].c_v
+
+                faces.pop(delaunay.find_tri_index(tri,faces))
+                faces.pop(delaunay.find_tri_index([aresta[0], aresta[1], pl], faces))
+
+                
+                faces.append([aresta[0], tri[2], len(verts)])
+                faces.append([len(verts), tri[2], aresta[1]])
+                faces.append([aresta[0], pl, len(verts)])
+                faces.append([len(verts), pl, aresta[1]])
+
                 
                 corners = corner_table.build_corner_table(faces)
 
